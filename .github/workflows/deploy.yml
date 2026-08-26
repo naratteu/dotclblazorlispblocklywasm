@@ -1,0 +1,46 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # peaceiris 가 gh-pages 브랜치로 푸시
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: wasm-tools 워크로드
+        run: dotnet workload install wasm-tools
+
+      - name: dotcl 툴 설치 (DotCL.Runtime.dll + dotcl.core 를 NuGet 캐시로)
+        run: dotnet tool install --global dotcl --version 0.1.25
+
+      - name: dotcl 산출물 확인 (디버그)
+        run: find ~/.nuget/packages/dotcl.* -name 'DotCL.Runtime.dll' -o -name 'dotcl.core' 2>/dev/null | head
+
+      - name: 발행 (GitHub Pages 용)
+        run: >
+          dotnet publish -c Release
+          -p:GHPages=true
+          -p:GHPagesBase=/dotclblazorlispblocklywasm/
+          -o publish
+
+      - name: gh-pages 로 배포
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: publish/wwwroot
+          force_orphan: true

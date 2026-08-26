@@ -5,29 +5,33 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
-    <DotclToolDir>$(NuGetPackageFolders)dotcl.osx-arm64/0.1.25/tools/net10.0/osx-arm64</DotclToolDir>
+    <DotclVersion>0.1.25</DotclVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.9" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.9" PrivateAssets="all" />
+    <!-- Blazor WASM → GitHub Pages 발행 (base href 재작성, 404.html, .nojekyll). -p:GHPages=true 로 활성 -->
+    <PackageReference Include="PublishSPAforGitHubPages.Build" Version="3.0.0" />
   </ItemGroup>
 
+  <!-- dotcl 런타임 dll 과 core 이미지는 설치된 dotcl 글로벌 툴에서 가져온다 (RID 무관: 관리형 IL).
+       RID 별 패키지(dotcl.osx-arm64 / dotcl.linux-x64 …) 어느 것이든 glob 으로 찾는다. -->
   <ItemGroup>
-    <!-- dotcl 런타임(관리형 IL) 참조 → _framework 로 배포되어 wasm 인터프리터가 실행 -->
-    <Reference Include="DotCL.Runtime">
-      <HintPath>$(DotclToolDir)/DotCL.Runtime.dll</HintPath>
+    <_DotclRuntime Include="$(NuGetPackageFolders)dotcl.*/$(DotclVersion)/**/DotCL.Runtime.dll" />
+    <_DotclCore Include="$(NuGetPackageFolders)dotcl.*/$(DotclVersion)/**/dotcl.core" />
+    <Reference Include="DotCL.Runtime" Condition="'@(_DotclRuntime)' != ''">
+      <HintPath>@(_DotclRuntime)</HintPath>
     </Reference>
   </ItemGroup>
 
-  <!-- Lisp 이미지(dotcl.core)는 저장소에 커밋하지 않는다.
-       설치된 dotcl 툴에서 빌드 시 wwwroot 로 복사 → 런타임에 HttpClient 로 받아 LoadCore(byte[]).
-       (전제조건: dotcl 을 dotnet global tool 로 설치) -->
+  <!-- Lisp 이미지(dotcl.core)는 저장소에 커밋하지 않고, 빌드 시 wwwroot 로 복사 →
+       런타임에 HttpClient 로 받아 LoadCore(byte[]). (전제조건: dotcl 을 dotnet global tool 로 설치) -->
   <Target Name="CopyDotclCore" BeforeTargets="ResolveStaticWebAssetsInputs;BeforeBuild"
-          Inputs="$(DotclToolDir)/dotcl.core" Outputs="wwwroot/dotcl.core">
-    <Error Condition="!Exists('$(DotclToolDir)/dotcl.core')"
-           Text="dotcl.core 를 찾을 수 없습니다: $(DotclToolDir). 'dotnet tool install --global dotcl' 후 DotclToolDir 의 RID/버전을 확인하세요." />
-    <Copy SourceFiles="$(DotclToolDir)/dotcl.core" DestinationFiles="wwwroot/dotcl.core" SkipUnchangedFiles="true" />
+          Inputs="@(_DotclCore)" Outputs="wwwroot/dotcl.core">
+    <Error Condition="'@(_DotclRuntime)' == '' or '@(_DotclCore)' == ''"
+           Text="dotcl 런타임/코어를 찾지 못했습니다. 'dotnet tool install --global dotcl --version $(DotclVersion)' 를 먼저 실행하세요." />
+    <Copy SourceFiles="@(_DotclCore)" DestinationFiles="wwwroot/dotcl.core" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>
