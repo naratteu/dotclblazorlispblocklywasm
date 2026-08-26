@@ -15,23 +15,33 @@
     <PackageReference Include="PublishSPAforGitHubPages.Build" Version="3.0.0" />
   </ItemGroup>
 
-  <!-- dotcl 런타임 dll 과 core 이미지는 설치된 dotcl 글로벌 툴에서 가져온다 (RID 무관: 관리형 IL).
-       RID 별 패키지(dotcl.osx-arm64 / dotcl.linux-x64 …) 어느 것이든 glob 으로 찾는다. -->
-  <ItemGroup>
+  <!-- dotcl 런타임 dll 과 core 이미지 (RID 무관: 관리형 IL).
+       경로를 -p:DotclRuntimeDll=… -p:DotclCoreFile=… 로 직접 줄 수 있고(CI),
+       없으면 로컬 NuGet 캐시(dnx 로 받은 dotcl.<rid>)에서 glob 으로 찾는다. -->
+  <ItemGroup Condition="'$(DotclRuntimeDll)' == ''">
     <_DotclRuntime Include="$(NuGetPackageFolders)dotcl.*/$(DotclVersion)/**/DotCL.Runtime.dll" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(DotclCoreFile)' == ''">
     <_DotclCore Include="$(NuGetPackageFolders)dotcl.*/$(DotclVersion)/**/dotcl.core" />
-    <Reference Include="DotCL.Runtime" Condition="'@(_DotclRuntime)' != ''">
-      <HintPath>@(_DotclRuntime)</HintPath>
+  </ItemGroup>
+  <PropertyGroup>
+    <DotclRuntimeDll Condition="'$(DotclRuntimeDll)' == ''">@(_DotclRuntime)</DotclRuntimeDll>
+    <DotclCoreFile Condition="'$(DotclCoreFile)' == ''">@(_DotclCore)</DotclCoreFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="DotCL.Runtime" Condition="'$(DotclRuntimeDll)' != ''">
+      <HintPath>$(DotclRuntimeDll)</HintPath>
     </Reference>
   </ItemGroup>
 
   <!-- Lisp 이미지(dotcl.core)는 저장소에 커밋하지 않고, 빌드 시 wwwroot 로 복사 →
-       런타임에 HttpClient 로 받아 LoadCore(byte[]). (전제조건: dotcl 을 dotnet global tool 로 설치) -->
+       런타임에 HttpClient 로 받아 LoadCore(byte[]). -->
   <Target Name="CopyDotclCore" BeforeTargets="ResolveStaticWebAssetsInputs;BeforeBuild"
-          Inputs="@(_DotclCore)" Outputs="wwwroot/dotcl.core">
-    <Error Condition="'@(_DotclRuntime)' == '' or '@(_DotclCore)' == ''"
-           Text="dotcl 런타임/코어를 찾지 못했습니다. 'dotnet tool install --global dotcl --version $(DotclVersion)' 를 먼저 실행하세요." />
-    <Copy SourceFiles="@(_DotclCore)" DestinationFiles="wwwroot/dotcl.core" SkipUnchangedFiles="true" />
+          Inputs="$(DotclCoreFile)" Outputs="wwwroot/dotcl.core">
+    <Error Condition="'$(DotclRuntimeDll)' == '' or '$(DotclCoreFile)' == ''"
+           Text="dotcl 런타임/코어를 찾지 못했습니다. dnx 로 dotcl 을 받거나 -p:DotclRuntimeDll= / -p:DotclCoreFile= 로 경로를 지정하세요." />
+    <Copy SourceFiles="$(DotclCoreFile)" DestinationFiles="wwwroot/dotcl.core" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

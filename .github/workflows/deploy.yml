@@ -25,17 +25,26 @@ jobs:
       - name: wasm-tools 워크로드
         run: dotnet workload install wasm-tools
 
-      - name: dotcl 툴 설치 (DotCL.Runtime.dll + dotcl.core 를 NuGet 캐시로)
+      - name: dotcl 툴 설치
         run: dotnet tool install --global dotcl --version 0.1.25
 
-      - name: dotcl 산출물 확인 (디버그)
-        run: find ~/.nuget/packages/dotcl.* -name 'DotCL.Runtime.dll' -o -name 'dotcl.core' 2>/dev/null | head
+      - name: dotcl 런타임/코어 경로 찾기 (툴 스토어 또는 NuGet 캐시)
+        id: dotcl
+        run: |
+          RT=$(find ~/.dotnet/tools ~/.nuget/packages -name 'DotCL.Runtime.dll' 2>/dev/null | head -1)
+          CORE=$(find ~/.dotnet/tools ~/.nuget/packages -name 'dotcl.core' 2>/dev/null | head -1)
+          echo "runtime=$RT" >> "$GITHUB_OUTPUT"
+          echo "core=$CORE" >> "$GITHUB_OUTPUT"
+          echo "찾음: RT=$RT CORE=$CORE"
+          test -n "$RT" && test -n "$CORE"
 
       - name: 발행 (GitHub Pages 용)
         run: >
           dotnet publish -c Release
           -p:GHPages=true
           -p:GHPagesBase=/dotclblazorlispblocklywasm/
+          -p:DotclRuntimeDll="${{ steps.dotcl.outputs.runtime }}"
+          -p:DotclCoreFile="${{ steps.dotcl.outputs.core }}"
           -o publish
 
       - name: gh-pages 로 배포

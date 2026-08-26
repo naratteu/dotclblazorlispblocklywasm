@@ -2,6 +2,9 @@
 
 이름이 곧 스택입니다: **dotcl + Blazor + Lisp + Blockly + WASM**.
 
+🔗 **라이브 데모: https://naratteu.github.io/dotclblazorlispblocklywasm/**
+(main 에 push 하면 GitHub Actions 가 자동 발행 → `gh-pages` 브랜치)
+
 브라우저에서 도는 Common Lisp 학습용 블록코딩 PoC. Blockly 드래그앤드랍 블록으로
 S-식을 조립하면, [dotcl](https://github.com/dotcl/dotcl)(.NET 위의 Common Lisp)이
 **브라우저 WebAssembly 안에서** 그 Lisp를 실행합니다. Blazor 서버도, 백엔드도 없습니다.
