@@ -75,6 +75,79 @@
   B.Extensions.registerMutator("lisp_arity_mutator", ARITY_MUTATOR,
     function () { this.itemCount_ = 2; this.updateShape_(); }, ["lisp_arity_item"]);
 
+  // ---------- let 전용 mutator (바인딩 = 이름+값 쌍, 개수 가변) ----------
+  // 형태: ( let ( a=[V0] b=[V1] … ) 몸통 [BODY] )   생성: (let ((a V0)(b V1)…) BODY)
+  const LET_MUTATOR = {
+    saveExtraState: function () { return { bindingCount: this.bindingCount_ }; },
+    loadExtraState: function (state) { this.bindingCount_ = state["bindingCount"] || 1; this.updateShape_(); },
+    decompose: function (workspace) {
+      const container = workspace.newBlock("lisp_let_container");
+      container.initSvg();
+      let connection = container.getInput("STACK").connection;
+      for (let i = 0; i < this.bindingCount_; i++) {
+        const item = workspace.newBlock("lisp_let_item");
+        item.initSvg();
+        connection.connect(item.previousConnection);
+        connection = item.nextConnection;
+      }
+      return container;
+    },
+    compose: function (container) {
+      let item = container.getInputTargetBlock("STACK");
+      const conns = [], names = [];
+      while (item) {
+        if (item.isInsertionMarker && item.isInsertionMarker()) { item = item.getNextBlock(); continue; }
+        conns.push(item.valueConnection_); names.push(item.nameValue_);
+        item = item.getNextBlock();
+      }
+      for (let i = 0; i < this.bindingCount_; i++) {
+        const t = this.getInput("VAL" + i).connection.targetConnection;
+        if (t && conns.indexOf(t) === -1) t.disconnect();
+      }
+      this.bindingCount_ = Math.max(1, conns.length);
+      this.updateShape_();
+      for (let i = 0; i < conns.length; i++) {
+        reconnectArg(conns[i], this, "VAL" + i);
+        if (names[i] != null) this.setFieldValue(names[i], "NAME" + i);
+      }
+    },
+    saveConnections: function (container) {
+      let item = container.getInputTargetBlock("STACK");
+      let i = 0;
+      while (item) {
+        if (item.isInsertionMarker && item.isInsertionMarker()) { item = item.getNextBlock(); continue; }
+        const inp = this.getInput("VAL" + i);
+        item.valueConnection_ = inp && inp.connection.targetConnection;
+        item.nameValue_ = this.getFieldValue("NAME" + i);
+        item = item.getNextBlock(); i++;
+      }
+    },
+    updateShape_: function () {
+      if (!this.getInput("LEAD")) this.appendDummyInput("LEAD").appendField("( let (");
+      if (!this.getInput("MID")) this.appendDummyInput("MID").appendField(") 몸통");
+      if (!this.getInput("BODY")) this.appendValueInput("BODY");
+      if (!this.getInput("CLOSE")) this.appendDummyInput("CLOSE").appendField(")");
+      let have = 0; while (this.getInput("VAL" + have)) have++;
+      for (let j = this.bindingCount_; j < have; j++) this.removeInput("VAL" + j);
+      for (let j = Math.min(have, this.bindingCount_); j < this.bindingCount_; j++) {
+        this.appendValueInput("VAL" + j).appendField(new B.FieldTextInput("x"), "NAME" + j).appendField("=");
+        this.moveInputBefore("VAL" + j, "MID");
+      }
+      this.moveInputBefore("MID", "BODY");
+      this.moveInputBefore("BODY", "CLOSE");
+    },
+  };
+
+  B.Blocks["lisp_let_container"] = { init() {
+    this.appendDummyInput().appendField("바인딩들"); this.appendStatementInput("STACK");
+    this.setColour(290); this.contextMenu = false; } };
+  B.Blocks["lisp_let_item"] = { init() {
+    this.appendDummyInput().appendField("바인딩"); this.setPreviousStatement(true); this.setNextStatement(true);
+    this.setColour(290); this.contextMenu = false; } };
+
+  B.Extensions.registerMutator("lisp_let_mutator", LET_MUTATOR,
+    function () { this.bindingCount_ = 1; this.updateShape_(); }, ["lisp_let_item"]);
+
   // ---------- 블록 정의 ----------
   B.defineBlocksWithJsonArray([
     { type: "lisp_number", message0: "%1", args0: [{ type: "field_number", name: "N", value: 0 }],
@@ -100,22 +173,19 @@
     { type: "lisp_print", message0: "( print %1 )", args0: [{ type: "input_value", name: "X" }],
       inputsInline: true, output: null, colour: 60, tooltip: "(print x)" },
 
-    // ( progn  a  b )  순차 실행
-    { type: "lisp_progn", message0: "( progn %1 %2 )",
-      args0: [{ type: "input_value", name: "A" }, { type: "input_value", name: "B" }],
-      inputsInline: true, output: null, colour: 60, tooltip: "(progn a b) — 위에서 아래로 실행, 마지막 값이 결과" },
+    // ( progn  e1  e2 … )  순차 실행 (가변)
+    { type: "lisp_progn", message0: "( progn", output: null, inputsInline: true, colour: 60,
+      mutator: "lisp_arity_mutator", tooltip: "(progn e1 e2 …) — 위에서 아래로 실행, 마지막 값이 결과. 톱니바퀴로 개수 조절" },
 
-    // ( let (( x  V ))  몸통 )
-    { type: "lisp_let", message0: "( let (( %1 %2 )) %3 )",
-      args0: [{ type: "field_input", name: "NAME", text: "x" }, { type: "input_value", name: "VAL" },
-              { type: "input_value", name: "BODY" }],
-      inputsInline: true, output: null, colour: 290, tooltip: "(let ((x V)) 몸통) — 지역 변수" },
+    // ( let ( a=V0  b=V1 … )  몸통 )  다중 바인딩 (전용 mutator)
+    { type: "lisp_let", output: null, inputsInline: true, colour: 290, mutator: "lisp_let_mutator",
+      tooltip: "(let ((a V0)(b V1)…) 몸통) — 지역 변수. 톱니바퀴로 바인딩 개수 조절. 몸통 여러 식은 progn 사용" },
 
-    // ( defun  이름 ( 인자들 )  몸통 )
-    { type: "lisp_defun", message0: "( defun %1 ( %2 ) %3 )",
-      args0: [{ type: "field_input", name: "NAME", text: "square" }, { type: "field_input", name: "PARAMS", text: "n" },
-              { type: "input_value", name: "BODY" }],
-      inputsInline: true, output: null, colour: 290, tooltip: "(defun 이름 (인자들) 몸통) — 함수 정의" },
+    // ( defun  이름 ( 인자들 )  몸통 … )  다중 몸통 (가변)
+    { type: "lisp_defun", message0: "( defun %1 ( %2 )",
+      args0: [{ type: "field_input", name: "NAME", text: "square" }, { type: "field_input", name: "PARAMS", text: "n" }],
+      output: null, inputsInline: true, colour: 290, mutator: "lisp_arity_mutator",
+      tooltip: "(defun 이름 (인자들) 몸통…) — 함수 정의. 몸통 여러 식 가능(톱니바퀴)" },
 
     // ( 이름  인자 … )  함수 호출 (가변)
     { type: "lisp_call", message0: "( %1", args0: [{ type: "field_input", name: "NAME", text: "square" }],
@@ -150,9 +220,22 @@
   gen.forBlock["lisp_var"]    = b => [b.getFieldValue("NAME"), ORDER];
   gen.forBlock["lisp_if"]     = b => [`(if ${v(b,"C","nil")} ${v(b,"T","nil")} ${v(b,"E","nil")})`, ORDER];
   gen.forBlock["lisp_print"]  = b => [`(print ${v(b,"X","nil")})`, ORDER];
-  gen.forBlock["lisp_progn"]  = b => [`(progn ${v(b,"A","nil")} ${v(b,"B","nil")})`, ORDER];
-  gen.forBlock["lisp_let"]    = b => [`(let ((${b.getFieldValue("NAME")} ${v(b,"VAL","nil")})) ${v(b,"BODY","nil")})`, ORDER];
-  gen.forBlock["lisp_defun"]  = b => [`(defun ${b.getFieldValue("NAME")} (${b.getFieldValue("PARAMS")}) ${v(b,"BODY","nil")})`, ORDER];
+  gen.forBlock["lisp_progn"]  = b => {
+    const es = [];
+    for (let i = 0; i < argCount(b); i++) { const c = v(b, "ARG" + i, ""); if (c) es.push(c); }
+    return [`(progn${es.length ? " " + es.join(" ") : ""})`, ORDER];
+  };
+  gen.forBlock["lisp_defun"]  = b => {
+    const body = [];
+    for (let i = 0; i < argCount(b); i++) { const c = v(b, "ARG" + i, ""); if (c) body.push(c); }
+    return [`(defun ${b.getFieldValue("NAME")} (${b.getFieldValue("PARAMS")})${body.length ? " " + body.join(" ") : ""})`, ORDER];
+  };
+  gen.forBlock["lisp_let"]    = b => {
+    const binds = [];
+    const n = typeof b.bindingCount_ === "number" ? b.bindingCount_ : 0;
+    for (let i = 0; i < n; i++) binds.push(`(${b.getFieldValue("NAME" + i) || "x"} ${v(b, "VAL" + i, "nil")})`);
+    return [`(let (${binds.join(" ")}) ${v(b, "BODY", "nil")})`, ORDER];
+  };
 
   gen.forBlock["lisp_op"] = b => {
     const args = [];
@@ -196,50 +279,52 @@
 
   // 재사용 헬퍼: 블록 JSON 을 짧게 구성
   const num = n => ({ block: { type: "lisp_number", fields: { N: n } } });
-  const varn = () => ({ block: { type: "lisp_var", fields: { NAME: "n" } } });
+  const vr = name => ({ block: { type: "lisp_var", fields: { NAME: name } } });
+  const varn = () => vr("n");
   const op = (o, ...as) => ({ block: { type: "lisp_op", extraState: { itemCount: as.length },
     fields: { OP: o }, inputs: Object.fromEntries(as.map((a, i) => ["ARG" + i, a])) } });
   const call = (name, ...as) => ({ block: { type: "lisp_call", extraState: { itemCount: as.length },
     fields: { NAME: name }, inputs: Object.fromEntries(as.map((a, i) => ["ARG" + i, a])) } });
   const iff = (c, t, e) => ({ block: { type: "lisp_if", inputs: { C: c, T: t, E: e } } });
+  // 다중 몸통 defun (top-level 블록 spec). body = 식들
+  const defun = (name, params, ...body) => ({ type: "lisp_defun", extraState: { itemCount: body.length },
+    fields: { NAME: name, PARAMS: params }, inputs: Object.fromEntries(body.map((e, i) => ["ARG" + i, e])) });
+  // 다중 바인딩 let (값 블록). binds = [["a", num(3)], …]
+  const letx = (binds, body) => ({ block: { type: "lisp_let", extraState: { bindingCount: binds.length },
+    fields: Object.fromEntries(binds.map((bd, i) => ["NAME" + i, bd[0]])),
+    inputs: Object.assign({ BODY: body }, Object.fromEntries(binds.map((bd, i) => ["VAL" + i, bd[1]]))) } });
+  const prn = (y, val) => ({ type: "lisp_print", x: 30, y, inputs: { X: val } });
   const plus12 = op("+", num(1), num(2));
 
   const EXAMPLES = {
-    // (defun square (n) (* n n)) 그리고 (print (square 7))  →  49
+    // (defun square (n) (* n n))  →  (print (square 7)) = 49
     square: { blocks: { languageVersion: 0, blocks: [
-      { type: "lisp_defun", x: 30, y: 20, fields: { NAME: "square", PARAMS: "n" },
-        inputs: { BODY: { block: { type: "lisp_op", extraState: { itemCount: 2 }, fields: { OP: "*" },
-          inputs: { ARG0: { block: { type: "lisp_var", fields: { NAME: "n" } } },
-                    ARG1: { block: { type: "lisp_var", fields: { NAME: "n" } } } } } } } },
-      { type: "lisp_print", x: 30, y: 180,
-        inputs: { X: { block: { type: "lisp_call", extraState: { itemCount: 1 }, fields: { NAME: "square" },
-          inputs: { ARG0: num(7) } } } } },
+      { ...defun("square", "n", op("*", varn(), varn())), x: 30, y: 20 },
+      prn(200, call("square", num(7))),
     ] } },
     // 코드=데이터: 같은 (+ 1 2) 를 그냥 평가 vs 인용, 그리고 (list 1 2 3)
     list: { blocks: { languageVersion: 0, blocks: [
-      { type: "lisp_print", x: 30, y: 20, inputs: { X: plus12 } },                                  // → 3
-      { type: "lisp_print", x: 30, y: 110,
-        inputs: { X: { block: { type: "lisp_quote", inputs: { X: plus12 } } } } },                  // → (+ 1 2)
-      { type: "lisp_print", x: 30, y: 200,
-        inputs: { X: { block: { type: "lisp_list", extraState: { itemCount: 3 },
-          inputs: { ARG0: num(1), ARG1: num(2), ARG2: num(3) } } } } },                             // → (1 2 3)
+      prn(20, plus12),                                                                   // → 3
+      prn(110, { block: { type: "lisp_quote", inputs: { X: plus12 } } }),                // → (+ 1 2)
+      prn(200, { block: { type: "lisp_list", extraState: { itemCount: 3 },
+        inputs: { ARG0: num(1), ARG1: num(2), ARG2: num(3) } } }),                       // → (1 2 3)
     ] } },
-    // 재귀: (defun fact (n) (if (<= n 1) 1 (* n (fact (- n 1)))))  →  (print (fact 5)) = 120
+    // 재귀: (defun fact (n) (if (<= n 1) 1 (* n (fact (- n 1)))))  →  (fact 5) = 120
     fact: { blocks: { languageVersion: 0, blocks: [
-      { type: "lisp_defun", x: 30, y: 20, fields: { NAME: "fact", PARAMS: "n" },
-        inputs: { BODY: iff(op("<=", varn(), num(1)),
-                            num(1),
-                            op("*", varn(), call("fact", op("-", varn(), num(1))))) } },
-      { type: "lisp_print", x: 30, y: 230, inputs: { X: call("fact", num(5)) } },
+      { ...defun("fact", "n", iff(op("<=", varn(), num(1)), num(1),
+          op("*", varn(), call("fact", op("-", varn(), num(1)))))), x: 30, y: 20 },
+      prn(250, call("fact", num(5))),
     ] } },
-    // 재귀: (defun fib (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))  →  (print (fib 10)) = 55
+    // 재귀: (defun fib (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))  →  (fib 10) = 55
     fib: { blocks: { languageVersion: 0, blocks: [
-      { type: "lisp_defun", x: 30, y: 20, fields: { NAME: "fib", PARAMS: "n" },
-        inputs: { BODY: iff(op("<", varn(), num(2)),
-                            varn(),
-                            op("+", call("fib", op("-", varn(), num(1))),
-                                    call("fib", op("-", varn(), num(2))))) } },
-      { type: "lisp_print", x: 30, y: 230, inputs: { X: call("fib", num(10)) } },
+      { ...defun("fib", "n", iff(op("<", varn(), num(2)), varn(),
+          op("+", call("fib", op("-", varn(), num(1))), call("fib", op("-", varn(), num(2)))))), x: 30, y: 20 },
+      prn(250, call("fib", num(10))),
+    ] } },
+    // 다중 바인딩 let: (let ((a 3) (b 4)) (+ (* a a) (* b b)))  →  25
+    letex: { blocks: { languageVersion: 0, blocks: [
+      prn(20, letx([["a", num(3)], ["b", num(4)]],
+        op("+", op("*", vr("a"), vr("a")), op("*", vr("b"), vr("b"))))),
     ] } },
   };
 
