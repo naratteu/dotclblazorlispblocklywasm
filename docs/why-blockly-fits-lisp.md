@@ -62,3 +62,24 @@ S-식(S-expression)은 **그 자체가 이미 추상구문트리(AST)**입니다
 
 그리고 이 프로젝트에서 가장 "Lisp다운" 부분은 블록 자체가 아니라 **저장 형식이
 곧 실행 가능한 소스 코드**라는 점입니다 — 동형성의 직접적인 결과입니다.
+
+## 관련 프로젝트 / 참고
+
+- **[AppKaki/blockly-ulisp](https://github.com/AppKaki/blockly-ulisp)** (lupyuen) —
+  진짜 Blockly → Lisp(s-식) 제너레이터입니다. 다만 **임베디드 전용**: RISC-V
+  BL602 보드에 [uLisp](http://www.ulisp.com/)(마이크로컨트롤러용 Lisp)를 올리는
+  도구로, 브라우저 wasm 시뮬레이터와 Web Serial 하드웨어 전송까지 갖췄습니다.
+  블록은 `Forever` / `On Start` / `Wait` / `GPIO Digital Write` 같은 **하드웨어용
+  이벤트 블록 4종**(Scratch/micro:bit 스타일)이고 제너레이터는 의도적으로
+  미완입니다. → **위 논지 #1·#2의 좋은 증거**: Blockly-Lisp이 실제로 나타난
+  곳은 "범용 Lisp 학습"이 아니라 **구체적 응용(IoT 하드웨어)이 동기가 된**
+  자리였고, 그마저도 필요한 블록만 최소로 만들었습니다.
+  (데모: <https://appkaki.github.io/blockly-ulisp/demos/code/>)
+
+- **[Mon-Ouie/blocky](https://github.com/Mon-Ouie/blocky)** — Common Lisp 기반
+  비주얼 프로그래밍 언어(별개 접근, 소규모 실험).
+
+이 저장소(dotclblazorlispblocklywasm)와의 차이: 여기는 **범용 Common Lisp 학습**을
+노리고 매크로·고차함수·`Lisp ⇄ 블록` 왕복까지 넣은, 브라우저에서 완결되는
+도구입니다. blockly-ulisp 가 "하드웨어를 위한 블록이 마침 Lisp을 뱉는다"면,
+여기는 "Lisp 자체를 블록으로 배운다"에 가깝습니다.
