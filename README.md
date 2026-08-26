@@ -48,3 +48,7 @@ RID/버전 경로(`dotcl.osx-arm64/0.1.25/...`)는 `csproj` 의 `DotclToolDir` �
 
 dotcl 은 IL 을 런타임에 로드·실행한다. Blazor WASM 의 Mono 인터프리터는 이를 지원하지만
 (그래서 동작), Native AOT 는 런타임 IL 로딩을 금지하므로 기본 core-load 경로가 실패한다.
+
+## 읽을거리
+
+- [왜 Lisp은 블록코딩과 잘 맞는데 진작 없었을까?](docs/why-blockly-fits-lisp.md)

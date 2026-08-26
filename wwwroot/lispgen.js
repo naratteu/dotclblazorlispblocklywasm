@@ -212,6 +212,34 @@
       inputsInline: true, output: null, colour: 170, tooltip: "(first 리스트) — 첫 원소 (car)" },
     { type: "lisp_rest", message0: "( rest %1 )", args0: [{ type: "input_value", name: "X" }],
       inputsInline: true, output: null, colour: 170, tooltip: "(rest 리스트) — 첫 원소 뺀 나머지 (cdr)" },
+
+    // ---- 고차 함수 (함수를 값으로) ----
+    { type: "lisp_funcref", message0: "#' %1", args0: [{ type: "field_input", name: "NAME", text: "1+" }],
+      output: null, colour: 260, tooltip: "함수 참조 #'name — 함수를 값으로 넘긴다" },
+    { type: "lisp_lambda", message0: "( lambda ( %1 )", args0: [{ type: "field_input", name: "PARAMS", text: "x" }],
+      output: null, inputsInline: true, colour: 260, mutator: "lisp_arity_mutator",
+      tooltip: "익명 함수 (lambda (인자들) 몸통…)" },
+    { type: "lisp_mapcar", message0: "( mapcar %1 %2 )",
+      args0: [{ type: "input_value", name: "FN" }, { type: "input_value", name: "LIST" }],
+      inputsInline: true, output: null, colour: 260, tooltip: "(mapcar 함수 리스트) — 각 원소에 함수 적용" },
+    { type: "lisp_reduce", message0: "( reduce %1 %2 )",
+      args0: [{ type: "input_value", name: "FN" }, { type: "input_value", name: "LIST" }],
+      inputsInline: true, output: null, colour: 260, tooltip: "(reduce 함수 리스트) — 접어서 하나로" },
+    { type: "lisp_funcall", message0: "( funcall %1", args0: [{ type: "input_value", name: "FN" }],
+      output: null, inputsInline: true, colour: 260, mutator: "lisp_arity_mutator",
+      tooltip: "(funcall 함수 인자…) — 함수값을 호출" },
+
+    // ---- 매크로 (코드를 만드는 코드) ----
+    { type: "lisp_defmacro", message0: "( defmacro %1 ( %2 )",
+      args0: [{ type: "field_input", name: "NAME", text: "my-unless" }, { type: "field_input", name: "PARAMS", text: "test body" }],
+      output: null, inputsInline: true, colour: 0, mutator: "lisp_arity_mutator",
+      tooltip: "매크로 정의 — 컴파일 전에 코드를 만들어낸다" },
+    { type: "lisp_quasi", message0: "` %1", args0: [{ type: "input_value", name: "X" }],
+      inputsInline: true, output: null, colour: 45, tooltip: "준인용(backquote) `X — 안에서 , 로 값을 끼운다" },
+    { type: "lisp_unquote", message0: ", %1", args0: [{ type: "input_value", name: "X" }],
+      inputsInline: true, output: null, colour: 45, tooltip: "인용해제 ,X — 준인용 안에서 값을 평가해 끼운다" },
+    { type: "lisp_splice", message0: ",@ %1", args0: [{ type: "input_value", name: "X" }],
+      inputsInline: true, output: null, colour: 45, tooltip: "스플라이스 ,@X — 리스트를 펼쳐 끼운다" },
   ]);
 
   // ---------- Lisp 제너레이터 ----------
@@ -262,6 +290,18 @@
   gen.forBlock["lisp_cons"]  = b => [`(cons ${v(b,"A","nil")} ${v(b,"B","nil")})`, ORDER];
   gen.forBlock["lisp_first"] = b => [`(first ${v(b,"X","nil")})`, ORDER];
   gen.forBlock["lisp_rest"]  = b => [`(rest ${v(b,"X","nil")})`, ORDER];
+  // 고차 함수
+  const bodyArgs = b => { const a = []; for (let i = 0; i < argCount(b); i++) { const c = v(b, "ARG" + i, ""); if (c) a.push(c); } return a; };
+  gen.forBlock["lisp_funcref"] = b => [`#'${b.getFieldValue("NAME")}`, ORDER];
+  gen.forBlock["lisp_lambda"]  = b => { const a = bodyArgs(b); return [`(lambda (${b.getFieldValue("PARAMS")})${a.length ? " " + a.join(" ") : ""})`, ORDER]; };
+  gen.forBlock["lisp_mapcar"]  = b => [`(mapcar ${v(b,"FN","nil")} ${v(b,"LIST","nil")})`, ORDER];
+  gen.forBlock["lisp_reduce"]  = b => [`(reduce ${v(b,"FN","nil")} ${v(b,"LIST","nil")})`, ORDER];
+  gen.forBlock["lisp_funcall"] = b => { const a = bodyArgs(b); return [`(funcall ${v(b,"FN","nil")}${a.length ? " " + a.join(" ") : ""})`, ORDER]; };
+  // 매크로
+  gen.forBlock["lisp_defmacro"] = b => { const a = bodyArgs(b); return [`(defmacro ${b.getFieldValue("NAME")} (${b.getFieldValue("PARAMS")})${a.length ? " " + a.join(" ") : ""})`, ORDER]; };
+  gen.forBlock["lisp_quasi"]   = b => ["`" + v(b, "X", "nil"), ORDER];
+  gen.forBlock["lisp_unquote"] = b => ["," + v(b, "X", "nil"), ORDER];
+  gen.forBlock["lisp_splice"]  = b => [",@" + v(b, "X", "nil"), ORDER];
 
   // 최상위(연결 안 된 값 블록들)를 세로 순서대로 모아 progn 으로 감싼다.
   function workspaceToLisp(ws) {
@@ -282,6 +322,11 @@
     { kind: "block", type: "lisp_list" }, { kind: "block", type: "lisp_quote" },
     { kind: "block", type: "lisp_cons" }, { kind: "block", type: "lisp_first" },
     { kind: "block", type: "lisp_rest" },
+    { kind: "block", type: "lisp_funcref" }, { kind: "block", type: "lisp_lambda" },
+    { kind: "block", type: "lisp_mapcar" }, { kind: "block", type: "lisp_reduce" },
+    { kind: "block", type: "lisp_funcall" },
+    { kind: "block", type: "lisp_defmacro" }, { kind: "block", type: "lisp_quasi" },
+    { kind: "block", type: "lisp_unquote" }, { kind: "block", type: "lisp_splice" },
   ] };
 
   // 재사용 헬퍼: 블록 JSON 을 짧게 구성
@@ -296,6 +341,12 @@
     fields: { NAME: name }, inputs: Object.fromEntries(as.map((a, i) => ["ARG" + i, a])) } });
   const lst = (...as) => ({ block: { type: "lisp_list", extraState: { itemCount: as.length },
     inputs: Object.fromEntries(as.map((a, i) => ["ARG" + i, a])) } });
+  const fref = name => ({ block: { type: "lisp_funcref", fields: { NAME: name } } });
+  const lam = (params, body) => ({ block: { type: "lisp_lambda", extraState: { itemCount: 1 }, fields: { PARAMS: params }, inputs: { ARG0: body } } });
+  const mapc = (fn, list) => ({ block: { type: "lisp_mapcar", inputs: { FN: fn, LIST: list } } });
+  const red = (fn, list) => ({ block: { type: "lisp_reduce", inputs: { FN: fn, LIST: list } } });
+  const quasi = x => ({ block: { type: "lisp_quasi", inputs: { X: x } } });
+  const unq = x => ({ block: { type: "lisp_unquote", inputs: { X: x } } });
   const iff = (c, t, e) => ({ block: { type: "lisp_if", inputs: { C: c, T: t, E: e } } });
   // 다중 몸통 defun (top-level 블록 spec). body = 식들
   const defun = (name, params, ...body) => ({ type: "lisp_defun", extraState: { itemCount: body.length },
@@ -355,6 +406,18 @@
     constants: { blocks: { languageVersion: 0, blocks: [
       prn(20, lst(konst("t"), konst("nil"), konst("pi"))),
     ] } },
+    // 고차 함수: mapcar + lambda, reduce + #'
+    hof: { blocks: { languageVersion: 0, blocks: [
+      prn(20, mapc(lam("x", op("*", vr("x"), vr("x"))), lst(num(1), num(2), num(3)))),   // → (1 4 9)
+      prn(100, red(fref("+"), lst(num(1), num(2), num(3), num(4), num(5)))),              // → 15
+    ] } },
+    // 매크로: (defmacro my-unless (test body) `(if ,test nil ,body)) 후 사용
+    macro: { blocks: { languageVersion: 0, blocks: [
+      { ...({ type: "lisp_defmacro", extraState: { itemCount: 1 }, fields: { NAME: "my-unless", PARAMS: "test body" },
+              inputs: { ARG0: quasi(iff(unq(vr("test")), konst("nil"), unq(vr("body")))) } }), x: 30, y: 20 },
+      { type: "lisp_call", extraState: { itemCount: 2 }, fields: { NAME: "my-unless" }, x: 30, y: 170,
+        inputs: { ARG0: konst("nil"), ARG1: { block: { type: "lisp_print", inputs: { X: str("매크로가 몸통을 실행!") } } } } },
+    ] } },
   };
 
   // 블록 하나의 서브트리만 Lisp 로 변환
@@ -376,14 +439,16 @@
         i = j; continue;
       }
       if (/\s/.test(c)) { i++; continue; }
-      if (c === "(" || c === ")" || c === "'") { toks.push(c); i++; continue; }
+      if (c === "#" && src[i + 1] === "'") { toks.push("#'"); i += 2; continue; }
+      if (c === "," && src[i + 1] === "@") { toks.push(",@"); i += 2; continue; }
+      if (c === "(" || c === ")" || c === "'" || c === "`" || c === ",") { toks.push(c); i++; continue; }
       if (c === '"') {
         let j = i + 1, str = "";
         while (j < n && src[j] !== '"') { if (src[j] === "\\") { str += src[j + 1]; j += 2; } else { str += src[j++]; } }
         toks.push({ str }); i = j + 1; continue;
       }
       let j = i, a = "";
-      while (j < n && !/\s/.test(src[j]) && !"()';".includes(src[j])) a += src[j++];
+      while (j < n && !/[\s()';,`]/.test(src[j])) a += src[j++];
       toks.push({ atom: a }); i = j;
     }
     return toks;
@@ -397,6 +462,10 @@
     function readForm() {
       let t = toks[pos++];
       if (t === "'") return { t: "list", items: [{ t: "sym", v: "quote" }, readForm()] };
+      if (t === "#'") return { t: "list", items: [{ t: "sym", v: "function" }, readForm()] };
+      if (t === "`") return { t: "quasi", item: readForm() };
+      if (t === ",") return { t: "unquote", item: readForm() };
+      if (t === ",@") return { t: "splice", item: readForm() };
       if (t === "(") {
         const items = [];
         for (;;) { skipCoords(); if (peek() === undefined) throw new Error("괄호 ( 가 닫히지 않았습니다"); if (peek() === ")") { pos++; break; } items.push(readForm()); }
@@ -423,6 +492,9 @@
   function formToBlock(node) {
     if (node.t === "num") return { block: { type: "lisp_number", fields: { N: parseFloat(node.v) } } };
     if (node.t === "str") return { block: { type: "lisp_string", fields: { S: node.v } } };
+    if (node.t === "quasi") return { block: { type: "lisp_quasi", inputs: { X: formToBlock(node.item) } } };
+    if (node.t === "unquote") return { block: { type: "lisp_unquote", inputs: { X: formToBlock(node.item) } } };
+    if (node.t === "splice") return { block: { type: "lisp_splice", inputs: { X: formToBlock(node.item) } } };
     if (node.t === "sym") {
       const s = node.v.toLowerCase();
       return CONSTS.has(s) ? { block: { type: "lisp_const", fields: { C: s } } }
@@ -452,12 +524,30 @@
       inputs.BODY = bodyBlock(body);
       return { block: { type: "lisp_let", extraState: { bindingCount: bnodes.length }, fields, inputs } };
     }
-    if (h === "defun") {
+    if (h === "defun" || h === "defmacro") {
+      const type = h === "defun" ? "lisp_defun" : "lisp_defmacro";
       const name = items[1].v;
       const params = items[2] && items[2].t === "list" ? items[2].items.map(x => x.v).join(" ") : "";
       const body = items.slice(3);
-      return { block: { type: "lisp_defun", extraState: { itemCount: body.length }, fields: { NAME: name, PARAMS: params },
+      return { block: { type, extraState: { itemCount: body.length }, fields: { NAME: name, PARAMS: params },
                         inputs: Object.fromEntries(body.map((f, i) => ["ARG" + i, formToBlock(f)])) } };
+    }
+    if (h === "function") {
+      // #'name → funcref 블록;  #'(lambda …) → lambda 블록
+      return args[0].t === "sym" ? { block: { type: "lisp_funcref", fields: { NAME: args[0].v } } } : formToBlock(args[0]);
+    }
+    if (h === "lambda") {
+      const params = items[1] && items[1].t === "list" ? items[1].items.map(x => x.v).join(" ") : "";
+      const body = items.slice(2);
+      return { block: { type: "lisp_lambda", extraState: { itemCount: body.length }, fields: { PARAMS: params },
+                        inputs: Object.fromEntries(body.map((f, i) => ["ARG" + i, formToBlock(f)])) } };
+    }
+    if (h === "mapcar") return { block: { type: "lisp_mapcar", inputs: { FN: formToBlock(args[0]), LIST: formToBlock(args[1]) } } };
+    if (h === "reduce") return { block: { type: "lisp_reduce", inputs: { FN: formToBlock(args[0]), LIST: formToBlock(args[1]) } } };
+    if (h === "funcall") {
+      const rest = args.slice(1);
+      return { block: { type: "lisp_funcall", extraState: { itemCount: rest.length },
+                        inputs: Object.assign({ FN: formToBlock(args[0]) }, Object.fromEntries(rest.map((a, i) => ["ARG" + i, formToBlock(a)]))) } };
     }
     return { block: { type: "lisp_call", extraState: { itemCount: args.length }, fields: { NAME: head.v }, inputs: argInputs() } };
   }
