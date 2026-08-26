@@ -121,6 +121,22 @@
     { type: "lisp_call", message0: "( %1", args0: [{ type: "field_input", name: "NAME", text: "square" }],
       output: null, inputsInline: true, colour: 290, mutator: "lisp_arity_mutator",
       tooltip: "함수 호출 — (이름 인자 …). 톱니바퀴로 인자 개수 조절" },
+
+    // ---- 리스트 & 인용(코드=데이터) ----
+    // ( list  a  b … )  인자를 평가해 리스트로 (가변)
+    { type: "lisp_list", message0: "( list", output: null, inputsInline: true, colour: 170,
+      mutator: "lisp_arity_mutator", tooltip: "(list …) — 인자를 평가해 리스트를 만든다. 톱니바퀴로 개수 조절" },
+    // ' X   인용: 평가하지 말고 코드를 데이터로
+    { type: "lisp_quote", message0: "' %1", args0: [{ type: "input_value", name: "X" }],
+      inputsInline: true, output: null, colour: 45,
+      tooltip: "인용(quote) 'X — 평가하지 않는다. (+ 1 2)→3 이지만 '(+ 1 2)→리스트 (+ 1 2)" },
+    { type: "lisp_cons", message0: "( cons %1 %2 )",
+      args0: [{ type: "input_value", name: "A" }, { type: "input_value", name: "B" }],
+      inputsInline: true, output: null, colour: 170, tooltip: "(cons a 리스트) — 맨 앞에 붙인다" },
+    { type: "lisp_first", message0: "( first %1 )", args0: [{ type: "input_value", name: "X" }],
+      inputsInline: true, output: null, colour: 170, tooltip: "(first 리스트) — 첫 원소 (car)" },
+    { type: "lisp_rest", message0: "( rest %1 )", args0: [{ type: "input_value", name: "X" }],
+      inputsInline: true, output: null, colour: 170, tooltip: "(rest 리스트) — 첫 원소 뺀 나머지 (cdr)" },
   ]);
 
   // ---------- Lisp 제너레이터 ----------
@@ -148,6 +164,15 @@
     for (let i = 0; i < argCount(b); i++) { const c = v(b, "ARG" + i, ""); if (c) args.push(c); }
     return [`(${b.getFieldValue("NAME")}${args.length ? " " + args.join(" ") : ""})`, ORDER];
   };
+  gen.forBlock["lisp_list"] = b => {
+    const args = [];
+    for (let i = 0; i < argCount(b); i++) { const c = v(b, "ARG" + i, ""); if (c) args.push(c); }
+    return [`(list${args.length ? " " + args.join(" ") : ""})`, ORDER];
+  };
+  gen.forBlock["lisp_quote"] = b => [`'${v(b, "X", "nil")}`, ORDER];
+  gen.forBlock["lisp_cons"]  = b => [`(cons ${v(b,"A","nil")} ${v(b,"B","nil")})`, ORDER];
+  gen.forBlock["lisp_first"] = b => [`(first ${v(b,"X","nil")})`, ORDER];
+  gen.forBlock["lisp_rest"]  = b => [`(rest ${v(b,"X","nil")})`, ORDER];
 
   // 최상위(연결 안 된 값 블록들)를 세로 순서대로 모아 progn 으로 감싼다.
   function workspaceToLisp(ws) {
@@ -164,23 +189,45 @@
     { kind: "block", type: "lisp_if" }, { kind: "block", type: "lisp_print" },
     { kind: "block", type: "lisp_progn" }, { kind: "block", type: "lisp_let" },
     { kind: "block", type: "lisp_defun" }, { kind: "block", type: "lisp_call" },
+    { kind: "block", type: "lisp_list" }, { kind: "block", type: "lisp_quote" },
+    { kind: "block", type: "lisp_cons" }, { kind: "block", type: "lisp_first" },
+    { kind: "block", type: "lisp_rest" },
   ] };
 
-  // 예제: (defun square (n) (* n n)) 그리고 (print (square 7))  →  49
-  const EXAMPLE = { blocks: { languageVersion: 0, blocks: [
-    { type: "lisp_defun", x: 30, y: 20, fields: { NAME: "square", PARAMS: "n" },
-      inputs: { BODY: { block: { type: "lisp_op", extraState: { itemCount: 2 }, fields: { OP: "*" },
-        inputs: { ARG0: { block: { type: "lisp_var", fields: { NAME: "n" } } },
-                  ARG1: { block: { type: "lisp_var", fields: { NAME: "n" } } } } } } } },
-    { type: "lisp_print", x: 30, y: 180,
-      inputs: { X: { block: { type: "lisp_call", extraState: { itemCount: 1 }, fields: { NAME: "square" },
-        inputs: { ARG0: { block: { type: "lisp_number", fields: { N: 7 } } } } } } } },
-  ] } };
+  // 재사용 헬퍼: 숫자/연산 블록 JSON
+  const num = n => ({ block: { type: "lisp_number", fields: { N: n } } });
+  const plus12 = { block: { type: "lisp_op", extraState: { itemCount: 2 }, fields: { OP: "+" },
+    inputs: { ARG0: num(1), ARG1: num(2) } } };
+
+  const EXAMPLES = {
+    // (defun square (n) (* n n)) 그리고 (print (square 7))  →  49
+    square: { blocks: { languageVersion: 0, blocks: [
+      { type: "lisp_defun", x: 30, y: 20, fields: { NAME: "square", PARAMS: "n" },
+        inputs: { BODY: { block: { type: "lisp_op", extraState: { itemCount: 2 }, fields: { OP: "*" },
+          inputs: { ARG0: { block: { type: "lisp_var", fields: { NAME: "n" } } },
+                    ARG1: { block: { type: "lisp_var", fields: { NAME: "n" } } } } } } } },
+      { type: "lisp_print", x: 30, y: 180,
+        inputs: { X: { block: { type: "lisp_call", extraState: { itemCount: 1 }, fields: { NAME: "square" },
+          inputs: { ARG0: num(7) } } } } },
+    ] } },
+    // 코드=데이터: 같은 (+ 1 2) 를 그냥 평가 vs 인용, 그리고 (list 1 2 3)
+    list: { blocks: { languageVersion: 0, blocks: [
+      { type: "lisp_print", x: 30, y: 20, inputs: { X: plus12 } },                                  // → 3
+      { type: "lisp_print", x: 30, y: 110,
+        inputs: { X: { block: { type: "lisp_quote", inputs: { X: plus12 } } } } },                  // → (+ 1 2)
+      { type: "lisp_print", x: 30, y: 200,
+        inputs: { X: { block: { type: "lisp_list", extraState: { itemCount: 3 },
+          inputs: { ARG0: num(1), ARG1: num(2), ARG2: num(3) } } } } },                             // → (1 2 3)
+    ] } },
+  };
 
   let workspace = null;
   window.lispBlocks = {
     init(divId) { workspace = B.inject(divId, { toolbox, trashcan: true, scrollbars: true }); },
     getCode() { return workspace ? workspaceToLisp(workspace) : "nil"; },
-    loadExample() { if (workspace) { workspace.clear(); B.serialization.workspaces.load(EXAMPLE, workspace); } },
+    loadExample(name) {
+      const ex = EXAMPLES[name] || EXAMPLES.square;
+      if (workspace) { workspace.clear(); B.serialization.workspaces.load(ex, workspace); }
+    },
   };
 })();
