@@ -79,6 +79,8 @@ S-식(S-expression)은 **그 자체가 이미 추상구문트리(AST)**입니다
 - **[Mon-Ouie/blocky](https://github.com/Mon-Ouie/blocky)** — Common Lisp 기반
   비주얼 프로그래밍 언어(별개 접근, 소규모 실험).
 
+- <https://www.perplexity.ai/search/8d6bb521-05a5-4c67-82f9-1853218ecbdd>
+
 이 저장소(dotclblazorlispblocklywasm)와의 차이: 여기는 **범용 Common Lisp 학습**을
 노리고 매크로·고차함수·`Lisp ⇄ 블록` 왕복까지 넣은, 브라우저에서 완결되는
 도구입니다. blockly-ulisp 가 "하드웨어를 위한 블록이 마침 Lisp을 뱉는다"면,
