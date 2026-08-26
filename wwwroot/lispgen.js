@@ -194,10 +194,15 @@
     { kind: "block", type: "lisp_rest" },
   ] };
 
-  // 재사용 헬퍼: 숫자/연산 블록 JSON
+  // 재사용 헬퍼: 블록 JSON 을 짧게 구성
   const num = n => ({ block: { type: "lisp_number", fields: { N: n } } });
-  const plus12 = { block: { type: "lisp_op", extraState: { itemCount: 2 }, fields: { OP: "+" },
-    inputs: { ARG0: num(1), ARG1: num(2) } } };
+  const varn = () => ({ block: { type: "lisp_var", fields: { NAME: "n" } } });
+  const op = (o, ...as) => ({ block: { type: "lisp_op", extraState: { itemCount: as.length },
+    fields: { OP: o }, inputs: Object.fromEntries(as.map((a, i) => ["ARG" + i, a])) } });
+  const call = (name, ...as) => ({ block: { type: "lisp_call", extraState: { itemCount: as.length },
+    fields: { NAME: name }, inputs: Object.fromEntries(as.map((a, i) => ["ARG" + i, a])) } });
+  const iff = (c, t, e) => ({ block: { type: "lisp_if", inputs: { C: c, T: t, E: e } } });
+  const plus12 = op("+", num(1), num(2));
 
   const EXAMPLES = {
     // (defun square (n) (* n n)) 그리고 (print (square 7))  →  49
@@ -218,6 +223,23 @@
       { type: "lisp_print", x: 30, y: 200,
         inputs: { X: { block: { type: "lisp_list", extraState: { itemCount: 3 },
           inputs: { ARG0: num(1), ARG1: num(2), ARG2: num(3) } } } } },                             // → (1 2 3)
+    ] } },
+    // 재귀: (defun fact (n) (if (<= n 1) 1 (* n (fact (- n 1)))))  →  (print (fact 5)) = 120
+    fact: { blocks: { languageVersion: 0, blocks: [
+      { type: "lisp_defun", x: 30, y: 20, fields: { NAME: "fact", PARAMS: "n" },
+        inputs: { BODY: iff(op("<=", varn(), num(1)),
+                            num(1),
+                            op("*", varn(), call("fact", op("-", varn(), num(1))))) } },
+      { type: "lisp_print", x: 30, y: 230, inputs: { X: call("fact", num(5)) } },
+    ] } },
+    // 재귀: (defun fib (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))  →  (print (fib 10)) = 55
+    fib: { blocks: { languageVersion: 0, blocks: [
+      { type: "lisp_defun", x: 30, y: 20, fields: { NAME: "fib", PARAMS: "n" },
+        inputs: { BODY: iff(op("<", varn(), num(2)),
+                            varn(),
+                            op("+", call("fib", op("-", varn(), num(1))),
+                                    call("fib", op("-", varn(), num(2))))) } },
+      { type: "lisp_print", x: 30, y: 230, inputs: { X: call("fib", num(10)) } },
     ] } },
   };
 
