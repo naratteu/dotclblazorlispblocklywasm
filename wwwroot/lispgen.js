@@ -363,6 +363,131 @@
     return (Array.isArray(c) ? c[0] : c) || "nil";
   }
 
+  // ===================== Lisp 코드 → 블록 (코드=데이터) =====================
+  // 리더: 소스를 토큰으로. 주석 중 "@block x y" 는 좌표 토큰으로 남긴다(그 외 주석은 무시).
+  function tokenize(src) {
+    const toks = []; let i = 0; const n = src.length;
+    while (i < n) {
+      const c = src[i];
+      if (c === ";") {
+        let j = i; while (j < n && src[j] !== "\n") j++;
+        const m = src.slice(i, j).match(/@(?:block|pos)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/);
+        if (m) toks.push({ coord: [parseFloat(m[1]), parseFloat(m[2])] });
+        i = j; continue;
+      }
+      if (/\s/.test(c)) { i++; continue; }
+      if (c === "(" || c === ")" || c === "'") { toks.push(c); i++; continue; }
+      if (c === '"') {
+        let j = i + 1, str = "";
+        while (j < n && src[j] !== '"') { if (src[j] === "\\") { str += src[j + 1]; j += 2; } else { str += src[j++]; } }
+        toks.push({ str }); i = j + 1; continue;
+      }
+      let j = i, a = "";
+      while (j < n && !/\s/.test(src[j]) && !"()';".includes(src[j])) a += src[j++];
+      toks.push({ atom: a }); i = j;
+    }
+    return toks;
+  }
+
+  // 파서: 토큰 → 최상위 폼 배열 [{ form, coord }]
+  function parse(toks) {
+    let pos = 0;
+    const peek = () => toks[pos];
+    const skipCoords = () => { while (peek() && peek().coord) pos++; };
+    function readForm() {
+      let t = toks[pos++];
+      if (t === "'") return { t: "list", items: [{ t: "sym", v: "quote" }, readForm()] };
+      if (t === "(") {
+        const items = [];
+        for (;;) { skipCoords(); if (peek() === undefined) throw new Error("괄호 ( 가 닫히지 않았습니다"); if (peek() === ")") { pos++; break; } items.push(readForm()); }
+        return { t: "list", items };
+      }
+      if (t === ")") throw new Error("여는 괄호 없이 ) 를 만났습니다");
+      if (t && t.str !== undefined) return { t: "str", v: t.str };
+      if (t && t.atom !== undefined) return /^-?\d+(\.\d+)?$/.test(t.atom) ? { t: "num", v: t.atom } : { t: "sym", v: t.atom };
+      throw new Error("예상치 못한 토큰");
+    }
+    const tops = [];
+    while (pos < toks.length) {
+      let coord = null; while (peek() && peek().coord) coord = toks[pos++].coord;
+      if (pos >= toks.length) break;
+      tops.push({ form: readForm(), coord });
+    }
+    return tops;
+  }
+
+  const CONSTS = new Set(["t", "nil", "pi", "most-positive-fixnum"]);
+  const OPS = new Set(["+", "-", "*", "/", "<", "<=", "=", ">", ">="]);
+
+  // AST 노드 → Blockly 블록 JSON ({ block: {...} })
+  function formToBlock(node) {
+    if (node.t === "num") return { block: { type: "lisp_number", fields: { N: parseFloat(node.v) } } };
+    if (node.t === "str") return { block: { type: "lisp_string", fields: { S: node.v } } };
+    if (node.t === "sym") {
+      const s = node.v.toLowerCase();
+      return CONSTS.has(s) ? { block: { type: "lisp_const", fields: { C: s } } }
+                           : { block: { type: "lisp_var", fields: { NAME: node.v } } };
+    }
+    const items = node.items;
+    if (items.length === 0) return { block: { type: "lisp_const", fields: { C: "nil" } } };
+    const head = items[0];
+    if (head.t !== "sym") throw new Error("함수 자리에 심볼이 아닌 것이 왔습니다(미지원)");
+    const h = head.v.toLowerCase(), args = items.slice(1);
+    const argInputs = () => Object.fromEntries(args.map((a, i) => ["ARG" + i, formToBlock(a)]));
+    const variadic = type => ({ block: { type, extraState: { itemCount: args.length }, inputs: argInputs() } });
+    if (h === "quote") return { block: { type: "lisp_quote", inputs: { X: formToBlock(args[0]) } } };
+    if (h === "if") return { block: { type: "lisp_if", inputs: { C: formToBlock(args[0]), T: formToBlock(args[1]), E: formToBlock(args[2]) } } };
+    if (h === "print") return { block: { type: "lisp_print", inputs: { X: formToBlock(args[0]) } } };
+    if (h === "progn") return variadic("lisp_progn");
+    if (h === "list") return variadic("lisp_list");
+    if (h === "cons") return { block: { type: "lisp_cons", inputs: { A: formToBlock(args[0]), B: formToBlock(args[1]) } } };
+    if (h === "first" || h === "car") return { block: { type: "lisp_first", inputs: { X: formToBlock(args[0]) } } };
+    if (h === "rest" || h === "cdr") return { block: { type: "lisp_rest", inputs: { X: formToBlock(args[0]) } } };
+    if (OPS.has(h)) return { block: { type: "lisp_op", extraState: { itemCount: args.length }, fields: { OP: h }, inputs: argInputs() } };
+    if (h === "let") {
+      const bnodes = items[1] && items[1].t === "list" ? items[1].items : [];
+      const body = items.slice(2);
+      const fields = {}, inputs = {};
+      bnodes.forEach((bn, i) => { fields["NAME" + i] = bn.items[0].v; inputs["VAL" + i] = formToBlock(bn.items[1]); });
+      inputs.BODY = bodyBlock(body);
+      return { block: { type: "lisp_let", extraState: { bindingCount: bnodes.length }, fields, inputs } };
+    }
+    if (h === "defun") {
+      const name = items[1].v;
+      const params = items[2] && items[2].t === "list" ? items[2].items.map(x => x.v).join(" ") : "";
+      const body = items.slice(3);
+      return { block: { type: "lisp_defun", extraState: { itemCount: body.length }, fields: { NAME: name, PARAMS: params },
+                        inputs: Object.fromEntries(body.map((f, i) => ["ARG" + i, formToBlock(f)])) } };
+    }
+    return { block: { type: "lisp_call", extraState: { itemCount: args.length }, fields: { NAME: head.v }, inputs: argInputs() } };
+  }
+  // 몸통 여러 식이면 progn 으로 감싼다
+  function bodyBlock(forms) {
+    if (forms.length <= 1) return formToBlock(forms[0] || { t: "sym", v: "nil" });
+    return { block: { type: "lisp_progn", extraState: { itemCount: forms.length },
+                      inputs: Object.fromEntries(forms.map((f, i) => ["ARG" + i, formToBlock(f)])) } };
+  }
+
+  // 블록 → Lisp 텍스트 (각 최상위 폼 위에 좌표 주석)
+  function saveCode(ws) {
+    return ws.getTopBlocks(true).map(b => {
+      const xy = b.getRelativeToSurfaceXY();
+      return `;; @block ${Math.round(xy.x)} ${Math.round(xy.y)}\n${blockToLisp(b)}`;
+    }).join("\n\n") + "\n";
+  }
+  // Lisp 텍스트 → 블록 로드
+  function loadCode(ws, text) {
+    const tops = parse(tokenize(text));
+    let y = 20;
+    const blocks = tops.map(({ form, coord }) => {
+      const b = formToBlock(form).block;
+      if (coord) { b.x = coord[0]; b.y = coord[1]; } else { b.x = 30; b.y = y; y += 140; }
+      return b;
+    });
+    ws.clear();
+    B.serialization.workspaces.load({ blocks: { languageVersion: 0, blocks } }, ws);
+  }
+
   // 우클릭 컨텍스트 메뉴: "이 블록만 평가" → .NET(EvalBlock) 호출
   let dotNetRef = null;
   B.ContextMenuRegistry.registry.register({
@@ -388,5 +513,7 @@
       const ex = EXAMPLES[name] || EXAMPLES.square;
       if (workspace) { workspace.clear(); B.serialization.workspaces.load(ex, workspace); }
     },
+    saveCode() { return workspace ? saveCode(workspace) : ""; },
+    loadCode(text) { if (workspace) loadCode(workspace, text); },
   };
 })();

@@ -41,6 +41,16 @@
     </div>
 </div>
 
+<div class="io">
+    <h3>Lisp ⇄ 블록 — 코드가 곧 저장 형식</h3>
+    <p class="hint">Lisp 를 붙여넣고 <b>블록으로</b>, 또는 블록을 <b>Lisp로</b>. 좌표는 각 최상위 폼 위 <code>;; @@block x y</code> 주석에 남습니다(여전히 유효한 Lisp).</p>
+    <textarea id="io" @bind="_ioText" rows="7" class="io-text" placeholder="(defun sq (n) (* n n))&#10;(print (sq 9))"></textarea>
+    <div class="io-buttons">
+        <button @onclick="ToBlocks" disabled="@(!_ready)">⬅ 블록으로</button>
+        <button @onclick="ToLisp" disabled="@(!_ready)">Lisp로 저장 ➡</button>
+    </div>
+</div>
+
 @code {
     private bool _ready;
     private string _code = "";
@@ -113,6 +123,16 @@
         _partial = false;
         await JS.InvokeVoidAsync("lispBlocks.loadExample", name);
     }
+
+    private string _ioText = "";
+
+    private async Task ToBlocks()
+    {
+        try { await JS.InvokeVoidAsync("lispBlocks.loadCode", _ioText); _output = "블록으로 불러왔습니다."; }
+        catch (Exception ex) { _output = "PARSE ERROR: " + ex.Message; }
+    }
+
+    private async Task ToLisp() => _ioText = await JS.InvokeAsync<string>("lispBlocks.saveCode");
 
     public void Dispose() => _selfRef?.Dispose();
 }
