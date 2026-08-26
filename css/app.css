@@ -1,0 +1,50 @@
+html, body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 0; }
+h1:focus { outline: none; }
+
+/* Blazor 부팅 진행 표시 (index.html 의 loading-progress svg) */
+.loading-progress {
+    position: absolute; display: block; width: 8rem; height: 8rem;
+    inset: 20vh 0 auto 0; margin: 0 auto;
+}
+.loading-progress circle {
+    fill: none; stroke: #e0e0e0; stroke-width: 0.6rem;
+    transform-origin: 50% 50%; transform: rotate(-90deg);
+}
+.loading-progress circle:last-child {
+    stroke: #1b6ec2;
+    stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
+    transition: stroke-dasharray 0.05s ease-in-out;
+}
+.loading-progress-text { position: absolute; text-align: center; font-weight: bold; inset: calc(20vh + 3.25rem) 0 auto 0.2rem; }
+.loading-progress-text:after { content: var(--blazor-load-percentage-text, "Loading"); }
+
+#blazor-error-ui {
+    color-scheme: light only; background: lightyellow; bottom: 0; box-sizing: border-box;
+    display: none; left: 0; padding: 0.6rem 1.25rem 0.7rem; position: fixed; width: 100%; z-index: 1000;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+}
+#blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: 0.75rem; top: 0.5rem; }
+
+/* 앱 UI */
+h1 { font-size: 1.3rem; margin: 10px; }
+.status { margin: 10px; color: #b36b00; }
+.workspace { margin: 10px; }
+.hint { margin: 6px 10px; color: #555; font-size: .9rem; }
+.blockly { height: 420px; width: 100%; border: 1px solid #ccc; border-radius: 8px; }
+.controls { margin: 10px; }
+button.run { font-size: 1rem; padding: 8px 18px; background: #2e7d32; color: #fff;
+             border: none; border-radius: 6px; cursor: pointer; }
+button.run:disabled { background: #9e9e9e; cursor: default; }
+.panes { display: flex; gap: 12px; margin: 10px; flex-wrap: wrap; }
+.pane { flex: 1 1 320px; }
+.pane h3 { font-size: .95rem; margin: 4px 0; }
+.pane pre { background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 8px;
+            min-height: 60px; white-space: pre-wrap; word-break: break-all; }
+#code { color: #9cdcfe; }
+.io { margin: 10px; }
+.io h3 { font-size: .95rem; margin: 4px 0; }
+.io-text { width: 100%; box-sizing: border-box; font-family: ui-monospace, Menlo, Consolas, monospace;
+           font-size: .9rem; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
+.io-buttons { margin-top: 6px; }
+.io-buttons button { font-size: .95rem; padding: 6px 14px; margin-right: 8px; border: 1px solid #888;
+                     border-radius: 6px; background: #f4f4f4; cursor: pointer; }
