@@ -43,6 +43,7 @@ jobs:
           dotnet publish -c Release
           -p:GHPages=true
           -p:GHPagesBase=/dotclblazorlispblocklywasm/
+          -p:WasmFingerprintAssets=false
           -p:DotclRuntimeDll="${{ steps.dotcl.outputs.runtime }}"
           -p:DotclCoreFile="${{ steps.dotcl.outputs.core }}"
           -o publish
