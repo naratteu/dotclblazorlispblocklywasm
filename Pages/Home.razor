@@ -1,0 +1,64 @@
+@page "/"
+@inject LispRuntime Lisp
+@inject IJSRuntime JS
+
+<PageTitle>Lisp Blocks</PageTitle>
+
+<h1>🧩 Lisp Blocks — 괄호 없이 블록으로 Common Lisp</h1>
+
+@if (!_ready)
+{
+    <p class="status"><em>Lisp 코어 로딩 중… (dotcl.core ~5MB)</em></p>
+}
+
+<div class="workspace">
+    <div id="blockly" class="blockly"></div>
+</div>
+
+<div class="controls">
+    <button class="run" @onclick="Run" disabled="@(!_ready)">▶ 실행</button>
+    <button class="example" @onclick="LoadExample" disabled="@(!_ready)">예제 불러오기</button>
+</div>
+
+<div class="panes">
+    <div class="pane">
+        <h3>생성된 Lisp</h3>
+        <pre id="code">@_code</pre>
+    </div>
+    <div class="pane">
+        <h3>결과</h3>
+        <pre id="out">@_output</pre>
+    </div>
+</div>
+
+@code {
+    private bool _ready;
+    private string _code = "";
+    private string _output = "";
+    private bool _injected;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Lisp.EnsureReadyAsync();
+        _ready = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Blockly 는 DOM(#blockly)이 그려진 뒤 주입한다.
+        if (_ready && !_injected)
+        {
+            _injected = true;
+            await JS.InvokeVoidAsync("lispBlocks.init", "blockly");
+        }
+    }
+
+    private async Task Run()
+    {
+        _code = await JS.InvokeAsync<string>("lispBlocks.getCode");
+        try { _output = Lisp.Eval(_code); }
+        catch (Exception ex) { _output = "ERROR: " + ex.Message; }
+    }
+
+    private async Task LoadExample() => await JS.InvokeVoidAsync("lispBlocks.loadExample");
+}

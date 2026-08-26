@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <DotclToolDir>$(NuGetPackageFolders)dotcl.osx-arm64/0.1.25/tools/net10.0/osx-arm64</DotclToolDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.9" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.9" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- dotcl 런타임(관리형 IL) 참조 → _framework 로 배포되어 wasm 인터프리터가 실행 -->
+    <Reference Include="DotCL.Runtime">
+      <HintPath>$(DotclToolDir)/DotCL.Runtime.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Lisp 이미지(dotcl.core)는 저장소에 커밋하지 않는다.
+       설치된 dotcl 툴에서 빌드 시 wwwroot 로 복사 → 런타임에 HttpClient 로 받아 LoadCore(byte[]).
+       (전제조건: dotcl 을 dotnet global tool 로 설치) -->
+  <Target Name="CopyDotclCore" BeforeTargets="ResolveStaticWebAssetsInputs;BeforeBuild"
+          Inputs="$(DotclToolDir)/dotcl.core" Outputs="wwwroot/dotcl.core">
+    <Error Condition="!Exists('$(DotclToolDir)/dotcl.core')"
+           Text="dotcl.core 를 찾을 수 없습니다: $(DotclToolDir). 'dotnet tool install --global dotcl' 후 DotclToolDir 의 RID/버전을 확인하세요." />
+    <Copy SourceFiles="$(DotclToolDir)/dotcl.core" DestinationFiles="wwwroot/dotcl.core" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

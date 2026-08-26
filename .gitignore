@@ -1,0 +1,9 @@
+bin/
+obj/
+*.user
+.vs/
+.idea/
+.DS_Store
+
+# 빌드 시 dotcl 툴에서 복사되는 Lisp 이미지 (커밋하지 않음)
+wwwroot/dotcl.core
