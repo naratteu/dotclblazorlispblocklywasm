@@ -1,4 +1,5 @@
 @page "/"
+@implements IDisposable
 @inject LispRuntime Lisp
 @inject IJSRuntime JS
 
@@ -14,6 +15,7 @@
 <div class="workspace">
     <div id="blockly" class="blockly"></div>
 </div>
+<p class="hint">💡 블록을 <b>우클릭 → “이 블록만 평가”</b> 하면 그 부분식만 즉시 계산합니다 (REPL 처럼). 모든 게 식(expression)이니까요.</p>
 
 <div class="controls">
     <button class="run" @onclick="Run" disabled="@(!_ready)">▶ 실행</button>
@@ -25,7 +27,7 @@
 
 <div class="panes">
     <div class="pane">
-        <h3>생성된 Lisp</h3>
+        <h3>@(_partial ? "평가한 부분식" : "생성된 Lisp")</h3>
         <pre id="code">@_code</pre>
     </div>
     <div class="pane">
@@ -38,7 +40,9 @@
     private bool _ready;
     private string _code = "";
     private string _output = "";
+    private bool _partial;
     private bool _injected;
+    private DotNetObjectReference<Home>? _selfRef;
 
     protected override async Task OnInitializedAsync()
     {
@@ -48,20 +52,43 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Blockly 는 DOM(#blockly)이 그려진 뒤 주입한다.
+        // Blockly 는 DOM(#blockly)이 그려진 뒤 주입한다. .NET 참조를 넘겨 우클릭 평가를 연결.
         if (_ready && !_injected)
         {
             _injected = true;
-            await JS.InvokeVoidAsync("lispBlocks.init", "blockly");
+            _selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("lispBlocks.init", "blockly", _selfRef);
         }
     }
 
     private async Task Run()
     {
+        _partial = false;
         _code = await JS.InvokeAsync<string>("lispBlocks.getCode");
-        try { _output = Lisp.Eval(_code); }
+        Evaluate(_code);
+    }
+
+    // Blockly 우클릭 "이 블록만 평가" → JS 가 호출 (부분식 코드 문자열 전달)
+    [JSInvokable]
+    public void EvalBlock(string code)
+    {
+        _partial = true;
+        _code = code;
+        Evaluate(code);
+        StateHasChanged();
+    }
+
+    private void Evaluate(string code)
+    {
+        try { _output = Lisp.Eval(code); }
         catch (Exception ex) { _output = "ERROR: " + ex.Message; }
     }
 
-    private async Task LoadExample(string name) => await JS.InvokeVoidAsync("lispBlocks.loadExample", name);
+    private async Task LoadExample(string name)
+    {
+        _partial = false;
+        await JS.InvokeVoidAsync("lispBlocks.loadExample", name);
+    }
+
+    public void Dispose() => _selfRef?.Dispose();
 }

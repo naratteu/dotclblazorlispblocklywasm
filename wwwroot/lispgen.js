@@ -243,9 +243,32 @@
     ] } },
   };
 
+  // 블록 하나의 서브트리만 Lisp 로 변환
+  function blockToLisp(block) {
+    const c = gen.blockToCode(block);
+    return (Array.isArray(c) ? c[0] : c) || "nil";
+  }
+
+  // 우클릭 컨텍스트 메뉴: "이 블록만 평가" → .NET(EvalBlock) 호출
+  let dotNetRef = null;
+  B.ContextMenuRegistry.registry.register({
+    id: "lisp_eval_block",
+    scopeType: B.ContextMenuRegistry.ScopeType.BLOCK,
+    weight: 100,
+    displayText: () => "이 블록만 평가",
+    preconditionFn: () => (dotNetRef ? "enabled" : "hidden"),
+    callback: (scope) => {
+      const code = blockToLisp(scope.block);
+      if (dotNetRef) dotNetRef.invokeMethodAsync("EvalBlock", code);
+    },
+  });
+
   let workspace = null;
   window.lispBlocks = {
-    init(divId) { workspace = B.inject(divId, { toolbox, trashcan: true, scrollbars: true }); },
+    init(divId, dotNet) {
+      dotNetRef = dotNet || null;
+      workspace = B.inject(divId, { toolbox, trashcan: true, scrollbars: true });
+    },
     getCode() { return workspace ? workspaceToLisp(workspace) : "nil"; },
     loadExample(name) {
       const ex = EXAMPLES[name] || EXAMPLES.square;

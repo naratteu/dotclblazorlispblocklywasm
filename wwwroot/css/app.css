@@ -29,6 +29,7 @@ h1:focus { outline: none; }
 h1 { font-size: 1.3rem; margin: 10px; }
 .status { margin: 10px; color: #b36b00; }
 .workspace { margin: 10px; }
+.hint { margin: 6px 10px; color: #555; font-size: .9rem; }
 .blockly { height: 420px; width: 100%; border: 1px solid #ccc; border-radius: 8px; }
 .controls { margin: 10px; }
 button.run { font-size: 1rem; padding: 8px 18px; background: #2e7d32; color: #fff;
