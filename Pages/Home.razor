@@ -19,11 +19,15 @@
 
 <div class="controls">
     <button class="run" @onclick="Run" disabled="@(!_ready)">▶ 실행</button>
-    <button class="example" @onclick='() => LoadExample("square")' disabled="@(!_ready)">예제: 함수</button>
-    <button class="example" @onclick='() => LoadExample("list")' disabled="@(!_ready)">예제: 리스트·인용</button>
-    <button class="example" @onclick='() => LoadExample("fact")' disabled="@(!_ready)">예제: 재귀(팩토리얼)</button>
-    <button class="example" @onclick='() => LoadExample("fib")' disabled="@(!_ready)">예제: 재귀(피보나치)</button>
-    <button class="example" @onclick='() => LoadExample("letex")' disabled="@(!_ready)">예제: let(다중 바인딩)</button>
+    <label>예제:
+        <select @onchange="OnPickExample" disabled="@(!_ready)">
+            <option value="">— 선택 —</option>
+            @foreach (var (key, label) in _examples)
+            {
+                <option value="@key">@label</option>
+            }
+        </select>
+    </label>
 </div>
 
 <div class="panes">
@@ -83,6 +87,25 @@
     {
         try { _output = Lisp.Eval(code); }
         catch (Exception ex) { _output = "ERROR: " + ex.Message; }
+    }
+
+    private readonly (string Key, string Label)[] _examples =
+    {
+        ("square",    "함수 (defun square)"),
+        ("list",      "리스트·인용 (코드=데이터)"),
+        ("fact",      "재귀 — 팩토리얼"),
+        ("fib",       "재귀 — 피보나치"),
+        ("letex",     "let — 다중 바인딩"),
+        ("strings",   "문자열"),
+        ("cond",      "조건 (if)"),
+        ("listops",   "리스트 조작 (first/rest/cons)"),
+        ("constants", "명명 상수 (t/nil/pi)"),
+    };
+
+    private async Task OnPickExample(ChangeEventArgs e)
+    {
+        var name = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(name)) await LoadExample(name);
     }
 
     private async Task LoadExample(string name)

@@ -155,7 +155,12 @@
     { type: "lisp_string", message0: "“ %1 ”", args0: [{ type: "field_input", name: "S", text: "hi" }],
       output: null, colour: 160, tooltip: "문자열" },
     { type: "lisp_var", message0: "%1", args0: [{ type: "field_input", name: "NAME", text: "x" }],
-      output: null, colour: 330, tooltip: "변수 참조 (심볼)" },
+      output: null, colour: 330, tooltip: "변수 참조 (심볼) — 이름을 직접 입력" },
+    // 명명 상수: 드롭다운으로 힌트 (t / nil / pi …)
+    { type: "lisp_const", message0: "%1", args0: [{ type: "field_dropdown", name: "C",
+        options: [["t", "t"], ["nil", "nil"], ["pi", "pi"],
+                  ["most-positive-fixnum", "most-positive-fixnum"]] }],
+      output: null, colour: 330, tooltip: "명명된 상수 — 드롭다운에서 선택" },
 
     // 전위 연산자: ( +  a  b … )  ← 연산자가 먼저, 인자는 가변
     { type: "lisp_op", message0: "( %1", args0: [
@@ -218,6 +223,7 @@
   gen.forBlock["lisp_number"] = b => [String(b.getFieldValue("N")), ORDER];
   gen.forBlock["lisp_string"] = b => ['"' + String(b.getFieldValue("S")).replace(/"/g, '\\"') + '"', ORDER];
   gen.forBlock["lisp_var"]    = b => [b.getFieldValue("NAME"), ORDER];
+  gen.forBlock["lisp_const"]  = b => [b.getFieldValue("C"), ORDER];
   gen.forBlock["lisp_if"]     = b => [`(if ${v(b,"C","nil")} ${v(b,"T","nil")} ${v(b,"E","nil")})`, ORDER];
   gen.forBlock["lisp_print"]  = b => [`(print ${v(b,"X","nil")})`, ORDER];
   gen.forBlock["lisp_progn"]  = b => {
@@ -268,7 +274,8 @@
   // ---------- 툴박스 ----------
   const toolbox = { kind: "flyoutToolbox", contents: [
     { kind: "block", type: "lisp_number" }, { kind: "block", type: "lisp_string" },
-    { kind: "block", type: "lisp_var" }, { kind: "block", type: "lisp_op" },
+    { kind: "block", type: "lisp_var" }, { kind: "block", type: "lisp_const" },
+    { kind: "block", type: "lisp_op" },
     { kind: "block", type: "lisp_if" }, { kind: "block", type: "lisp_print" },
     { kind: "block", type: "lisp_progn" }, { kind: "block", type: "lisp_let" },
     { kind: "block", type: "lisp_defun" }, { kind: "block", type: "lisp_call" },
@@ -279,12 +286,16 @@
 
   // 재사용 헬퍼: 블록 JSON 을 짧게 구성
   const num = n => ({ block: { type: "lisp_number", fields: { N: n } } });
+  const str = s => ({ block: { type: "lisp_string", fields: { S: s } } });
   const vr = name => ({ block: { type: "lisp_var", fields: { NAME: name } } });
+  const konst = c => ({ block: { type: "lisp_const", fields: { C: c } } });
   const varn = () => vr("n");
   const op = (o, ...as) => ({ block: { type: "lisp_op", extraState: { itemCount: as.length },
     fields: { OP: o }, inputs: Object.fromEntries(as.map((a, i) => ["ARG" + i, a])) } });
   const call = (name, ...as) => ({ block: { type: "lisp_call", extraState: { itemCount: as.length },
     fields: { NAME: name }, inputs: Object.fromEntries(as.map((a, i) => ["ARG" + i, a])) } });
+  const lst = (...as) => ({ block: { type: "lisp_list", extraState: { itemCount: as.length },
+    inputs: Object.fromEntries(as.map((a, i) => ["ARG" + i, a])) } });
   const iff = (c, t, e) => ({ block: { type: "lisp_if", inputs: { C: c, T: t, E: e } } });
   // 다중 몸통 defun (top-level 블록 spec). body = 식들
   const defun = (name, params, ...body) => ({ type: "lisp_defun", extraState: { itemCount: body.length },
@@ -325,6 +336,24 @@
     letex: { blocks: { languageVersion: 0, blocks: [
       prn(20, letx([["a", num(3)], ["b", num(4)]],
         op("+", op("*", vr("a"), vr("a")), op("*", vr("b"), vr("b"))))),
+    ] } },
+    // 문자열: (print "Hello, Lisp!")
+    strings: { blocks: { languageVersion: 0, blocks: [
+      prn(20, str("Hello, Lisp!")),
+    ] } },
+    // 조건: (if (< 3 5) "3 < 5" "아니오")  →  "3 < 5"
+    cond: { blocks: { languageVersion: 0, blocks: [
+      prn(20, iff(op("<", num(3), num(5)), str("3 < 5"), str("아니오"))),
+    ] } },
+    // 리스트 조작: first / rest / cons
+    listops: { blocks: { languageVersion: 0, blocks: [
+      prn(20, { block: { type: "lisp_first", inputs: { X: lst(num(10), num(20), num(30)) } } }),  // → 10
+      prn(90, { block: { type: "lisp_rest", inputs: { X: lst(num(10), num(20), num(30)) } } }),   // → (20 30)
+      prn(160, { block: { type: "lisp_cons", inputs: { A: num(0), B: lst(num(1), num(2)) } } }),  // → (0 1 2)
+    ] } },
+    // 명명 상수: (list t nil pi)  →  (T NIL 3.141592653589793)
+    constants: { blocks: { languageVersion: 0, blocks: [
+      prn(20, lst(konst("t"), konst("nil"), konst("pi"))),
     ] } },
   };
 
